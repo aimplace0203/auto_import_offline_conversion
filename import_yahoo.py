@@ -1,8 +1,9 @@
 import os
 import re
 import csv
+import json
 import datetime
-import pywinauto
+import requests
 from time import sleep
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -79,11 +80,11 @@ def importCsvFromYahoo(downloadsFilePath):
         logger.debug(f'Error: importCsvFromYahoo: {err}')
         exit(1)
 
-def getLatestDownloadedFileName(downloadsFilePath):
-    if len(os.listdir(downloadsFilePath)) == 0:
+def getLatestDownloadedFileName(downloadsDirPath):
+    if len(os.listdir(downloadsDirPath)) == 0:
         return None
     return max (
-        [downloadsFilePath + '/' + f for f in os.listdir(downloadsFilePath)],
+        [downloadsDirPath + '/' + f for f in os.listdir(downloadsDirPath)],
         key=os.path.getctime
     )
 
@@ -100,96 +101,161 @@ def getCsvData(csvPath):
             tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
             yield [yclid, 'real_cv', tdate, row[9], 'JPY']
 
-def createCsvFile(data):
+def createCsvFile(data, outputFilePath):
     header = ["YCLID","コンバージョン名","コンバージョン発生日時","1コンバージョンあたりの価値","通貨コード"]
-    with open('./output/育毛剤YSS_CV戻し.csv', 'w', newline='', encoding='cp932') as f:
+    with open(outputFilePath, 'w', newline='', encoding='cp932') as f:
         writer = csv.writer(f, delimiter=',', lineterminator='\r\n',  quoting=csv.QUOTE_ALL)
         writer.writerow(header)
         writer.writerows(data)
 
-def uploadCsvFile():
-    url = "https://business.yahoo.co.jp/"
-    login = os.environ['YAHOO_ID']
-    password = os.environ['YAHOO_PASS']
-    
-    ua = UserAgent()
-    logger.debug(f'uploadCsvFile: UserAgent: {ua.chrome}')
-
-    options = Options()
-    options.add_argument(f'user-agent={ua.chrome}')
-
+def getAccessToken():
     try:
-        driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+        url_token = f'https://biz-oauth.yahoo.co.jp/oauth/v1/token?grant_type=refresh_token' \
+                f'&client_id={os.environ["YAHOO_CLIENT_ID"]}' \
+                f'&client_secret={os.environ["YAHOO_CLIENT_SECRET"]}' \
+                f'&refresh_token={os.environ["YAHOO_REFRESH_TOKEN"]}'
+        req = requests.get(url_token)
+        body = json.loads(req.text)
+        access_token = body['access_token']
+        return access_token
+    except Exception as err:
+        logger.error(f'Error: getAccessToken: {err}')
+        exit(1)
+
+def sendChatworkNotification(message):
+    try:
+        url = f'https://api.chatwork.com/v2/rooms/{os.environ["CHATWORK_ROOM_ID"]}/messages'
+        headers = { 'X-ChatWorkToken': os.environ["CHATWORK_API_TOKEN"] }
+        params = { 'body': message }
+        requests.post(url, headers=headers, params=params)
+    except Exception as err:
+        logger.error(f'Error: sendChatworkNotification: {err}')
+        exit(1)
+
+def uploadCsvFile(data, outputFileName, outputFilePath):
+    try:
+        url_api = 'https://ads-search.yahooapis.jp/api/v6/OfflineConversionService/upload'
+        headers = { 'Authorization': f'Bearer {getAccessToken()}' }
+        files = { 'file': open(outputFilePath, mode='rb') }
+        params = {
+                'accountId': os.environ["YAHOO_ACCOUNT_ID"],
+                'uploadType': 'NEW',
+                'uploadFileName': outputFileName
+                }
+        req = requests.post(url_api, headers=headers, files=files, params=params)
+        body = json.loads(req.text)
+        logger.info(f'uploadCsvFile - status_code: {req.status_code}')
+        logger.info(f'uploadCsvFile - response:\n--> {req.text}')
+
+        if req.status_code != 200:
+            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+            message += 'インポートに失敗しました。\n'
+            message += '担当者は実行ログの確認を行ってください。\n\n'
+            message += f'ステータスコード：{req.status_code}\n\n'
+            message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+            sendChatworkNotification(message)
+            exit(0)
+
+        if body['errors'] != None:
+            errors = body['errors'][0]
+            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+            message += 'インポートに失敗しました。\n'
+            message += '担当者は実行ログの確認を行ってください。\n\n'
+            message += f'ステータスコード：{req.status_code}\n'
+            message += f'エラーコード：{errors["code"]}\n'
+            message += f'エラーメッセージ：{errors["message"]}\n'
+            message += f'エラー詳細：{errors["details"]}\n\n'
+            message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+            sendChatworkNotification(message)
+            exit(0)
         
-        driver.get(url)
-        driver.maximize_window()
-        driver.implicitly_wait(10)
-
-        driver.find_element_by_link_text('ログイン').click()
-        driver.implicitly_wait(20)
-
-        driver.find_element_by_id('user_name').send_keys(login)
-        driver.find_element_by_id('password').send_keys(password)
-        driver.find_element_by_xpath('//input[@type="submit"]').click()
-
-        logger.debug('uploadCsvFile: yahoo login')
-        driver.implicitly_wait(20)
-        
-        driver.find_element_by_link_text('広告管理ツール').click()
-        driver.implicitly_wait(20)
-        driver.find_element_by_link_text('検索広告').click()
-        driver.implicitly_wait(20)
-        driver.find_element_by_link_text('ツール').click()
-        driver.implicitly_wait(20)
-        driver.find_element_by_link_text('コンバージョン測定').click()
-        driver.implicitly_wait(20)
-        driver.find_element_by_link_text('オフラインコンバージョンのインポート').click()
-        driver.implicitly_wait(20)
-        driver.find_element_by_xpath('//a[@data-test="showUploadPanel"]').click()
-        driver.implicitly_wait(20)
-        driver.find_element_by_xpath('//input[@data-test="file"]').click()
-
-        findWindow = lambda: pywinauto.findwindows.find_windows(title='開く')[0]
-
-        dialog = pywinauto.timings.wait_until_passes(5, 1, findWindow)
-        pwa_app = pywinauto.Application()
-        pwa_app.connect(handle=dialog)
-        window = pwa_app['開く']
-        window.wait('ready')
-
-        pywinauto.keyboard.send_keys("%N")
-        edit = window.Edit4
-        edit.set_focus()
-        edit.set_text(file_path)
-
-        button = window['開く(&O):']
-        button.click()
-
-        #driver.find_element_by_xpath('//input[@data-text="submitButton"]').click()
-
-        driver.close()
-        driver.quit()
+        return body['rval']['values'][0]['offlineConversion']['uploadId']
     except Exception as err:
         logger.debug(f'Error: uploadCsvFile: {err}')
+        exit(1)
+
+def checkUploadStatus(uploadId):
+    try:
+        url_api = f'https://ads-search.yahooapis.jp/api/v6/OfflineConversionService/get'
+        headers = { 'Authorization': f'Bearer {getAccessToken()}' }
+        params = {
+                'accountId': os.environ["YAHOO_ACCOUNT_ID"],
+                'uploadIds': [ uploadId ]
+               }
+        req = requests.post(url_api, headers=headers, json=params)
+        body = json.loads(req.text)
+        logger.info(f'checkUploadStatus - status_code: {req.status_code}')
+        logger.info(f'checkUploadStatus - response:\n--> {req.text}')
+
+        if req.status_code != 200:
+            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+            message += 'インポート結果の取得に失敗しました。\n'
+            message += '担当者はYahoo!広告管理画面からインポート結果の確認を行ってください。\n\n'
+            message += f'ステータスコード：{req.status_code}\n\n'
+            message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+            sendChatworkNotification(message)
+            exit(0)
+
+        if body['errors'] != None:
+            errors = body['errors'][0]
+            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+            message += 'インポート結果の取得に失敗しました。\n'
+            message += '担当者はYahoo!広告管理画面からインポート結果の確認を行ってください。\n\n'
+            message += f'ステータスコード：{req.status_code}\n'
+            message += f'エラーコード：{errors["code"]}\n'
+            message += f'エラーメッセージ：{errors["message"]}\n'
+            message += f'エラー詳細：{errors["details"]}\n\n'
+            message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+            sendChatworkNotification(message)
+            exit(0)
+
+        result = body['rval']['values'][0]['offlineConversion']
+        message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+        message += 'インポートが完了しました。\n\n'
+        message += f'アップロードID：{result["uploadId"]}\n'
+        message += f'アップロード日時：{result["uploadedDate"]}\n'
+        message += f'ステータス：{result["processStatus"]}\n\n'
+        message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+        sendChatworkNotification(message)
+
+    except Exception as err:
+        logger.debug(f'Error: checkUploadStatus: {err}')
         exit(1)
 
 ### main_script ###
 if __name__ == '__main__':
 
     try:
-        downloadsFilePath = './csv'
-        os.makedirs(downloadsFilePath, exist_ok=True)
+        downloadsDirPath = './csv'
+        os.makedirs(downloadsDirPath, exist_ok=True)
+        outputDirPath = './output'
+        outputFileName = '育毛剤YSS_CV戻し.csv'
+        os.makedirs(outputDirPath, exist_ok=True)
+        outputFilePath = f'{outputDirPath}/{outputFileName}'
 
         logger.debug("import_yahoo: start get_domain_info")
-        importCsvFromYahoo(downloadsFilePath)
-        csvPath = getLatestDownloadedFileName(downloadsFilePath)
+        importCsvFromYahoo(downloadsDirPath)
+        csvPath = getLatestDownloadedFileName(downloadsDirPath)
         logger.info(f"import_yahoo: download {csvPath}")
 
         data = list(getCsvData(csvPath))
         logger.info(data)
-        createCsvFile(data)
+        if len(data) == 0:
+            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+            message += '昨日の発生件数は 0 件です。[/info]'
+            sendChatworkNotification(message)
+            exit(0)
 
-        uploadCsvFile()
+        logger.info("import_yahoo: createCsvFile")
+        createCsvFile(data, outputFilePath)
+
+        logger.info("import_yahoo: uploadCsvFile")
+        uploadId = uploadCsvFile(data, outputFileName, outputFilePath)
+        sleep(30)
+
+        logger.info(f"import_yahoo: uploadId -> {uploadId}")
+        logger.info("import_yahoo: checkUploadStatus")
+        checkUploadStatus(uploadId)
         logger.info("import_yahoo: Finish")
         exit(0)
     except Exception as err:
