@@ -2,6 +2,7 @@ import os
 import re
 import csv
 import json
+import shutil
 import datetime
 import requests
 from time import sleep
@@ -25,7 +26,7 @@ logger.addHandler(handler)
 logger.propagate = False
 
 ### functions ###
-def importCsvFromYahoo(downloadsFilePath):
+def importCsvFromYahoo(downloadsDirPath):
     url = "https://www.afi-b.com/"
     login = os.environ['AFB_ID']
     password = os.environ['AFB_PASS']
@@ -39,7 +40,7 @@ def importCsvFromYahoo(downloadsFilePath):
     prefs = {
         "profile.default_content_settings.popups": 1,
         "download.default_directory": 
-                os.path.abspath(downloadsFilePath),
+                os.path.abspath(downloadsDirPath),
         "directory_upgrade": True
     }
     options.add_experimental_option("prefs", prefs)
@@ -256,6 +257,9 @@ if __name__ == '__main__':
         logger.info(f"import_yahoo: uploadId -> {uploadId}")
         logger.info("import_yahoo: checkUploadStatus")
         checkUploadStatus(uploadId)
+
+        shutil.rmtree(downloadsDirPath)
+        shutil.rmtree(outputDirPath)
         logger.info("import_yahoo: Finish")
         exit(0)
     except Exception as err:
