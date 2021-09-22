@@ -26,13 +26,13 @@ logger.addHandler(handler)
 logger.propagate = False
 
 ### functions ###
-def importCsvFromYahoo(downloadsDirPath):
+def importCsvFromAfb(downloadsDirPath):
     url = "https://www.afi-b.com/"
     login = os.environ['AFB_ID']
     password = os.environ['AFB_PASS']
     
     ua = UserAgent()
-    logger.debug(f'importCsvFromYahoo: UserAgent: {ua.chrome}')
+    logger.debug(f'importCsvFromAfb: UserAgent: {ua.chrome}')
 
     options = Options()
     options.add_argument(f'user-agent={ua.chrome}')
@@ -56,7 +56,7 @@ def importCsvFromYahoo(downloadsDirPath):
         driver.find_element_by_xpath('//input[@name="password"]').send_keys(password)
         driver.find_element_by_xpath('//input[@type="submit"]').click()
 
-        logger.debug('importCsvFromYahoo: afb login')
+        logger.debug('importCsvFromAfb: afb login')
         sleep(5)
         
         driver.find_element_by_xpath('//a[@href="/pa/result/"]').click()
@@ -65,11 +65,11 @@ def importCsvFromYahoo(downloadsDirPath):
         sleep(2)
         driver.find_element_by_id('site_select_chzn_o_1').click()
 
-        logger.info('importCsvFromYahoo: select site')
+        logger.info('importCsvFromAfb: select site')
         sleep(2)
 
         driver.find_element_by_xpath('//input[@value="ytd"]').click()
-        logger.info('importCsvFromYahoo: select date range')
+        logger.info('importCsvFromAfb: select date range')
         sleep(1)
 
         driver.find_element_by_xpath('//input[@src="/assets/img/report/btn_original_csv.gif"]').click()
@@ -78,7 +78,7 @@ def importCsvFromYahoo(downloadsDirPath):
         driver.close()
         driver.quit()
     except Exception as err:
-        logger.debug(f'Error: importCsvFromYahoo: {err}')
+        logger.debug(f'Error: importCsvFromAfb: {err}')
         exit(1)
 
 def getLatestDownloadedFileName(downloadsDirPath):
@@ -235,7 +235,7 @@ if __name__ == '__main__':
         outputFilePath = f'{outputDirPath}/{outputFileName}'
 
         logger.debug("import_yahoo: start get_domain_info")
-        importCsvFromYahoo(downloadsDirPath)
+        importCsvFromAfb(downloadsDirPath)
         csvPath = getLatestDownloadedFileName(downloadsDirPath)
         logger.info(f"import_yahoo: download {csvPath}")
 
@@ -258,8 +258,6 @@ if __name__ == '__main__':
         logger.info("import_yahoo: checkUploadStatus")
         checkUploadStatus(uploadId)
 
-        shutil.rmtree(downloadsDirPath)
-        shutil.rmtree(outputDirPath)
         logger.info("import_yahoo: Finish")
         exit(0)
     except Exception as err:
