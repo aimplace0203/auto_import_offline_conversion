@@ -94,7 +94,7 @@ def getCsvData(csvPath):
         buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
         next(buf)
         for row in buf:
-            index = row[16].find('yclid=')
+            index = row[16].find('yclid=YSS')
             if index == -1:
                 continue
             yclid = row[16].split('yclid=')[1]
@@ -133,7 +133,7 @@ def sendChatworkNotification(message):
         logger.error(f'Error: sendChatworkNotification: {err}')
         exit(1)
 
-def uploadCsvFile(data, outputFileName, outputFilePath):
+def uploadCsvFile(length, outputFileName, outputFilePath):
     try:
         url_api = 'https://ads-search.yahooapis.jp/api/v6/OfflineConversionService/upload'
         headers = { 'Authorization': f'Bearer {getAccessToken()}' }
@@ -153,7 +153,7 @@ def uploadCsvFile(data, outputFileName, outputFilePath):
             message += 'インポートに失敗しました。\n'
             message += '担当者は実行ログの確認を行ってください。\n\n'
             message += f'ステータスコード：{req.status_code}\n\n'
-            message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+            message += f'昨日のYSS発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
 
@@ -166,22 +166,23 @@ def uploadCsvFile(data, outputFileName, outputFilePath):
             message += f'エラーコード：{errors["code"]}\n'
             message += f'エラーメッセージ：{errors["message"]}\n'
             message += f'エラー詳細：{errors["details"]}\n\n'
-            message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+            message += f'昨日のYSS発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
         
-        return body['rval']['values'][0]['offlineConversion']['uploadId']
+        uploadId = body['rval']['values'][0]['offlineConversion']['uploadId']
+        return [ uploadId ]
     except Exception as err:
         logger.debug(f'Error: uploadCsvFile: {err}')
         exit(1)
 
-def checkUploadStatus(uploadId):
+def checkUploadStatus(length, uploadId):
     try:
         url_api = f'https://ads-search.yahooapis.jp/api/v6/OfflineConversionService/get'
         headers = { 'Authorization': f'Bearer {getAccessToken()}' }
         params = {
                 'accountId': os.environ["YAHOO_ACCOUNT_ID"],
-                'uploadIds': [ uploadId ]
+                'uploadIds': uploadId
                }
         req = requests.post(url_api, headers=headers, json=params)
         body = json.loads(req.text)
@@ -193,7 +194,7 @@ def checkUploadStatus(uploadId):
             message += 'インポート結果の取得に失敗しました。\n'
             message += '担当者はYahoo!広告管理画面からインポート結果の確認を行ってください。\n\n'
             message += f'ステータスコード：{req.status_code}\n\n'
-            message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+            message += f'昨日のYSS発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
 
@@ -206,17 +207,20 @@ def checkUploadStatus(uploadId):
             message += f'エラーコード：{errors["code"]}\n'
             message += f'エラーメッセージ：{errors["message"]}\n'
             message += f'エラー詳細：{errors["details"]}\n\n'
-            message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+            message += f'昨日のYSS発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
 
-        result = body['rval']['values'][0]['offlineConversion']
         message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
         message += 'インポートが完了しました。\n\n'
-        message += f'アップロードID：{result["uploadId"]}\n'
-        message += f'アップロード日時：{result["uploadedDate"]}\n'
-        message += f'ステータス：{result["processStatus"]}\n\n'
-        message += f'昨日の発生件数は {len(data)} 件です。[/info]'
+
+        for value in body['rval']['values']:
+            result = value['offlineConversion']
+            message += f'アップロードID：{result["uploadId"]}\n'
+            message += f'アップロード日時：{result["uploadedDate"]}\n'
+            message += f'ステータス：{result["processStatus"]}\n\n'
+
+        message += f'昨日のYSS発生件数は {length} 件です。[/info]'
         sendChatworkNotification(message)
 
     except Exception as err:
@@ -241,22 +245,36 @@ if __name__ == '__main__':
 
         data = list(getCsvData(csvPath))
         logger.info(data)
-        if len(data) == 0:
+        length = len(data)
+        if length == 0:
             message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-            message += '昨日の発生件数は 0 件です。[/info]'
+            message += '昨日のYSS発生件数は 0 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
+        elif length % 2 != 0:
+            logger.info("import_yahoo: createCsvFile")
+            createCsvFile(data, outputFilePath)
 
-        logger.info("import_yahoo: createCsvFile")
-        createCsvFile(data, outputFilePath)
+            logger.info("import_yahoo: uploadCsvFile")
+            uploadId = uploadCsvFile(length, outputFileName, outputFilePath)
+        else:
+            data2 = [data.pop(0)]
 
-        logger.info("import_yahoo: uploadCsvFile")
-        uploadId = uploadCsvFile(data, outputFileName, outputFilePath)
-        sleep(30)
+            logger.info("import_yahoo: data: createCsvFile")
+            createCsvFile(data, outputFilePath)
+            logger.info("import_yahoo: data: uploadCsvFile")
+            uploadId = uploadCsvFile(length, outputFileName, outputFilePath)
+            sleep(5)
 
+            logger.info("import_yahoo: data2: createCsvFile")
+            createCsvFile(data2, outputFilePath)
+            logger.info("import_yahoo: data2: uploadCsvFile")
+            uploadId.extend(uploadCsvFile(length, outputFileName, outputFilePath))
+
+        sleep(15)
         logger.info(f"import_yahoo: uploadId -> {uploadId}")
         logger.info("import_yahoo: checkUploadStatus")
-        checkUploadStatus(uploadId)
+        checkUploadStatus(length, uploadId)
 
         logger.info("import_yahoo: Finish")
         exit(0)
