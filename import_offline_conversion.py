@@ -112,7 +112,7 @@ def getGoogleCsvData(csvPath):
                 continue
             gclid = row[16].split('gclid=')[1]
             date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
-            tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
+            tdate = date.strftime('%Y/%m/%d %H:%M:%S')
             yield [gclid, 'real_cv2', tdate, row[9], 'JPY']
 
 def writeUploadData(data):
@@ -155,11 +155,11 @@ def writeUploadData(data):
 
         sheet.update_cells(cell_list, value_input_option='USER_ENTERED')
         message = "[info][title]【Google】オフラインコンバージョンのインポート結果[/title]\n"
-        message += 'スプレッドシートへのデータ入力が完了しました。\n\n'
+        message += 'スプレッドシートへのデータ入力が完了しました。\n'
+        message += '入力されたデータは 7:00AM に自動でアップロードされます。\n\n'
         message += f'昨日のGSN発生件数は {length} 件です。[/info]'
         sendChatworkNotification(message)
         return
-
     except Exception as err:
         logger.debug(f'Error: checkUploadStatus: {err}')
         exit(1)
