@@ -91,19 +91,17 @@ def getLatestDownloadedFileName(downloadsDirPath):
         key=os.path.getctime
     )
 
-def getYahooCsvData(csvPath):
-    with open(csvPath, newline='', encoding='cp932') as csvfile:
-        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
-        next(buf)
-        for row in buf:
-            index = row[16].find('yclid=YSS')
-            if index == -1:
-                continue
-            yclid = row[16].split('yclid=')[1]
-            date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
-            tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
-            yield [yclid, 'real_cv', tdate, row[9], 'JPY']
+def sendChatworkNotification(message):
+    try:
+        url = f'https://api.chatwork.com/v2/rooms/{os.environ["CHATWORK_ROOM_ID"]}/messages'
+        headers = { 'X-ChatWorkToken': os.environ["CHATWORK_API_TOKEN"] }
+        params = { 'body': message }
+        requests.post(url, headers=headers, params=params)
+    except Exception as err:
+        logger.error(f'Error: sendChatworkNotification: {err}')
+        exit(1)
 
+### Google ###
 def getGoogleCsvData(csvPath):
     with open(csvPath, newline='', encoding='cp932') as csvfile:
         buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
@@ -116,37 +114,6 @@ def getGoogleCsvData(csvPath):
             date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
             tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
             yield [gclid, 'real_cv2', tdate, row[9], 'JPY']
-
-def createCsvFile(data, outputFilePath):
-    header = ["YCLID","コンバージョン名","コンバージョン発生日時","1コンバージョンあたりの価値","通貨コード"]
-    with open(outputFilePath, 'w', newline='', encoding='cp932') as f:
-        writer = csv.writer(f, delimiter=',', lineterminator='\r\n',  quoting=csv.QUOTE_ALL)
-        writer.writerow(header)
-        writer.writerows(data)
-
-def getAccessToken():
-    try:
-        url_token = f'https://biz-oauth.yahoo.co.jp/oauth/v1/token?grant_type=refresh_token' \
-                f'&client_id={os.environ["YAHOO_CLIENT_ID"]}' \
-                f'&client_secret={os.environ["YAHOO_CLIENT_SECRET"]}' \
-                f'&refresh_token={os.environ["YAHOO_REFRESH_TOKEN"]}'
-        req = requests.get(url_token)
-        body = json.loads(req.text)
-        access_token = body['access_token']
-        return access_token
-    except Exception as err:
-        logger.error(f'Error: getAccessToken: {err}')
-        exit(1)
-
-def sendChatworkNotification(message):
-    try:
-        url = f'https://api.chatwork.com/v2/rooms/{os.environ["CHATWORK_ROOM_ID"]}/messages'
-        headers = { 'X-ChatWorkToken': os.environ["CHATWORK_API_TOKEN"] }
-        params = { 'body': message }
-        requests.post(url, headers=headers, params=params)
-    except Exception as err:
-        logger.error(f'Error: sendChatworkNotification: {err}')
-        exit(1)
 
 def writeUploadData(data):
     try:
@@ -195,6 +162,41 @@ def writeUploadData(data):
 
     except Exception as err:
         logger.debug(f'Error: checkUploadStatus: {err}')
+        exit(1)
+
+### Yahoo! ###
+def getYahooCsvData(csvPath):
+    with open(csvPath, newline='', encoding='cp932') as csvfile:
+        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
+        next(buf)
+        for row in buf:
+            index = row[16].find('yclid=YSS')
+            if index == -1:
+                continue
+            yclid = row[16].split('yclid=')[1]
+            date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
+            tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
+            yield [yclid, 'real_cv', tdate, row[9], 'JPY']
+
+def createCsvFile(data, outputFilePath):
+    header = ["YCLID","コンバージョン名","コンバージョン発生日時","1コンバージョンあたりの価値","通貨コード"]
+    with open(outputFilePath, 'w', newline='', encoding='cp932') as f:
+        writer = csv.writer(f, delimiter=',', lineterminator='\r\n',  quoting=csv.QUOTE_ALL)
+        writer.writerow(header)
+        writer.writerows(data)
+
+def getAccessToken():
+    try:
+        url_token = f'https://biz-oauth.yahoo.co.jp/oauth/v1/token?grant_type=refresh_token' \
+                f'&client_id={os.environ["YAHOO_CLIENT_ID"]}' \
+                f'&client_secret={os.environ["YAHOO_CLIENT_SECRET"]}' \
+                f'&refresh_token={os.environ["YAHOO_REFRESH_TOKEN"]}'
+        req = requests.get(url_token)
+        body = json.loads(req.text)
+        access_token = body['access_token']
+        return access_token
+    except Exception as err:
+        logger.error(f'Error: getAccessToken: {err}')
         exit(1)
 
 def uploadCsvFile(length, outputFileName, outputFilePath):
