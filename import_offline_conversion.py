@@ -5,6 +5,7 @@ import json
 import shutil
 import datetime
 import requests
+import gspread
 from time import sleep
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -13,6 +14,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.select import Select
 from fake_useragent import UserAgent
 from webdriver_manager.chrome import ChromeDriverManager
+from oauth2client.service_account import ServiceAccountCredentials
 
 # Logger setting
 from logging import getLogger, FileHandler, DEBUG
@@ -89,7 +91,7 @@ def getLatestDownloadedFileName(downloadsDirPath):
         key=os.path.getctime
     )
 
-def getCsvData(csvPath):
+def getYahooCsvData(csvPath):
     with open(csvPath, newline='', encoding='cp932') as csvfile:
         buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
         next(buf)
@@ -101,6 +103,19 @@ def getCsvData(csvPath):
             date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
             tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
             yield [yclid, 'real_cv', tdate, row[9], 'JPY']
+
+def getGoogleCsvData(csvPath):
+    with open(csvPath, newline='', encoding='cp932') as csvfile:
+        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
+        next(buf)
+        for row in buf:
+            index = row[16].find('gclid=')
+            if index == -1:
+                continue
+            gclid = row[16].split('gclid=')[1]
+            date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
+            tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
+            yield [gclid, 'real_cv2', tdate, row[9], 'JPY']
 
 def createCsvFile(data, outputFilePath):
     header = ["YCLID","コンバージョン名","コンバージョン発生日時","1コンバージョンあたりの価値","通貨コード"]
@@ -131,6 +146,55 @@ def sendChatworkNotification(message):
         requests.post(url, headers=headers, params=params)
     except Exception as err:
         logger.error(f'Error: sendChatworkNotification: {err}')
+        exit(1)
+
+def writeUploadData(data):
+    try:
+        SPREADSHEET_ID = os.environ['CONVERSION_IMPORT_SSID']
+        scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+        credentials = ServiceAccountCredentials.from_json_keyfile_name('spreadsheet.json', scope)
+        gc = gspread.authorize(credentials)
+        sheet = gc.open_by_key(SPREADSHEET_ID).worksheet('conversion-import-template')
+
+        sheet.clear()
+        sheet.update_acell('A1', 'Parameters:TimeZone= Asia/Tokyo;')
+        sheet.update_acell('A2', 'Google Click ID')
+        sheet.update_acell('B2', 'Conversion Name')
+        sheet.update_acell('C2', 'Conversion Time')
+        sheet.update_acell('D2', 'Conversion Value')
+        sheet.update_acell('E2', 'Conversion Currency')
+
+        length = len(data)
+        if length == 0:
+            message = "[info][title]【Google】オフラインコンバージョンのインポート結果[/title]\n"
+            message += f'昨日のGSN発生件数は {length} 件です。[/info]'
+            sendChatworkNotification(message)
+            return
+
+        cell_list = sheet.range(f'A3:E{2 + length}')
+        i = 0
+        for cell in cell_list:
+            if i % 5 == 0:
+                cell.value = data[int(i / 5)][0]
+            if i % 5 == 1:
+                cell.value = data[int(i / 5)][1]
+            if i % 5 == 2:
+                cell.value = data[int(i / 5)][2]
+            if i % 5 == 3:
+                cell.value = data[int(i / 5)][3]
+            if i % 5 == 4:
+                cell.value = data[int(i / 5)][4]
+            i += 1
+
+        sheet.update_cells(cell_list, value_input_option='USER_ENTERED')
+        message = "[info][title]【Google】オフラインコンバージョンのインポート結果[/title]\n"
+        message += 'スプレッドシートへのデータ入力が完了しました。\n\n'
+        message += f'昨日のGSN発生件数は {length} 件です。[/info]'
+        sendChatworkNotification(message)
+        return
+
+    except Exception as err:
+        logger.debug(f'Error: checkUploadStatus: {err}')
         exit(1)
 
 def uploadCsvFile(length, outputFileName, outputFilePath):
@@ -238,13 +302,17 @@ if __name__ == '__main__':
         os.makedirs(outputDirPath, exist_ok=True)
         outputFilePath = f'{outputDirPath}/{outputFileName}'
 
-        logger.debug("import_yahoo: start get_domain_info")
+        logger.debug("import_offline_conversion: start import_csv_from_afb")
         importCsvFromAfb(downloadsDirPath)
         csvPath = getLatestDownloadedFileName(downloadsDirPath)
-        logger.info(f"import_yahoo: download {csvPath}")
+        logger.info(f"import_offline_conversion: complete download: {csvPath}")
 
-        data = list(getCsvData(csvPath))
-        logger.info(data)
+        data = list(getGoogleCsvData(csvPath))
+        logger.info(f'google: {data}')
+        writeUploadData(data)
+
+        data = list(getYahooCsvData(csvPath))
+        logger.info(f'yahoo: {data}')
         length = len(data)
         if length == 0:
             message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
@@ -252,32 +320,32 @@ if __name__ == '__main__':
             sendChatworkNotification(message)
             exit(0)
         elif length % 2 != 0:
-            logger.info("import_yahoo: createCsvFile")
+            logger.info("import_offline_conversion: createCsvFile")
             createCsvFile(data, outputFilePath)
 
-            logger.info("import_yahoo: uploadCsvFile")
+            logger.info("import_offline_conversion: uploadCsvFile")
             uploadId = uploadCsvFile(length, outputFileName, outputFilePath)
         else:
             data2 = [data.pop(0)]
 
-            logger.info("import_yahoo: data: createCsvFile")
+            logger.info("import_offline_conversion: data: createCsvFile")
             createCsvFile(data, outputFilePath)
-            logger.info("import_yahoo: data: uploadCsvFile")
+            logger.info("import_offline_conversion: data: uploadCsvFile")
             uploadId = uploadCsvFile(length, outputFileName, outputFilePath)
             sleep(5)
 
-            logger.info("import_yahoo: data2: createCsvFile")
+            logger.info("import_offline_conversion: data2: createCsvFile")
             createCsvFile(data2, outputFilePath)
-            logger.info("import_yahoo: data2: uploadCsvFile")
+            logger.info("import_offline_conversion: data2: uploadCsvFile")
             uploadId.extend(uploadCsvFile(length, outputFileName, outputFilePath))
 
         sleep(15)
-        logger.info(f"import_yahoo: uploadId -> {uploadId}")
-        logger.info("import_yahoo: checkUploadStatus")
+        logger.info(f"import_offline_conversion: uploadId -> {uploadId}")
+        logger.info("import_offline_conversion: checkUploadStatus")
         checkUploadStatus(length, uploadId)
 
-        logger.info("import_yahoo: Finish")
+        logger.info("import_offline_conversion: Finish")
         exit(0)
     except Exception as err:
-        logger.debug(f'import_yahoo: {err}')
+        logger.debug(f'import_offline_conversion: {err}')
         exit(1)
