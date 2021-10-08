@@ -161,7 +161,7 @@ def writeUploadData(data):
         sendChatworkNotification(message)
         return
     except Exception as err:
-        logger.debug(f'Error: checkUploadStatus: {err}')
+        logger.debug(f'Error: writeUploadData: {err}')
         exit(1)
 
 ### Yahoo! ###
