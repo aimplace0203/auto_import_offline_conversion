@@ -83,6 +83,65 @@ def importCsvFromAfb(downloadsDirPath):
         logger.debug(f'Error: importCsvFromAfb: {err}')
         exit(1)
 
+def importCsvFromLinkA(downloadsDirPath):
+    url = "https://link-ag.net/partner/sign_in"
+    login = os.environ['LINKA_ID']
+    password = os.environ['LINKA_PASS']
+
+    ua = UserAgent()
+    logger.debug(f'importCsvFromLinkA: UserAgent: {ua.chrome}')
+
+    options = Options()
+    options.add_argument(f'user-agent={ua.chrome}')
+
+    prefs = {
+        "profile.default_content_settings.popups": 1,
+        "download.default_directory":
+                os.path.abspath(downloadsDirPath),
+        "directory_upgrade": True
+    }
+    options.add_experimental_option("prefs", prefs)
+
+    try:
+        driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+
+        driver.get(url)
+        driver.maximize_window()
+        sleep(2)
+
+        driver.find_element_by_id('login_id').send_keys(login)
+        driver.find_element_by_id('password').send_keys(password)
+        driver.find_element_by_xpath('//input[@type="submit"]').click()
+
+        logger.debug('importCsvFromLinkA: linka login')
+        sleep(5)
+
+        driver.find_element_by_xpath('//a[@href="/partner/achievements"]').click()
+        sleep(2)
+
+        driver.find_elements_by_id('occurrence_time_occurrence_time')[1].click()
+        sleep(2)
+
+        logger.info('importCsvFromLinkA: select date range')
+        sleep(1)
+
+        driver.find_element_by_xpath('//input[@value="検索"]').click()
+        sleep(5)
+
+        dropdown = driver.find_element_by_id("separator")
+        select = Select(dropdown)
+        select.select_by_value('comma')
+        sleep(2)
+
+        driver.find_element_by_class_name('partnerMain-btn-md').click()
+        sleep(2)
+
+        driver.close()
+        driver.quit()
+    except Exception as err:
+        logger.debug(f'Error: importCsvFromLinkA: {err}')
+        exit(1)
+
 def getLatestDownloadedFileName(downloadsDirPath):
     if len(os.listdir(downloadsDirPath)) == 0:
         return None
@@ -101,6 +160,10 @@ def sendChatworkNotification(message):
         logger.error(f'Error: sendChatworkNotification: {err}')
         exit(1)
 
+def get_unique_list(seq):
+    seen = []
+    return [x for x in seq if x not in seen and not seen.append(x)]
+
 ### Google ###
 def getGoogleCsvData(csvPath):
     with open(csvPath, newline='', encoding='cp932') as csvfile:
@@ -114,6 +177,19 @@ def getGoogleCsvData(csvPath):
             date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
             tdate = date.strftime('%Y/%m/%d %H:%M:%S')
             yield [gclid, 'real_cv2', tdate, row[9], 'JPY']
+
+def getGoogleCsvDataLinkA(csvPath):
+    with open(csvPath, newline='', encoding='utf-16-le') as csvfile:
+        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
+        next(buf)
+        for row in buf:
+            print(row)
+            index = row[13].find('gclid=')
+            if index == -1:
+                continue
+            gclid = row[13].split('gclid=')[1]
+            reward = int(row[6]) / 1.1
+            yield [gclid, 'real_cv2', row[2], round(reward), 'JPY']
 
 def writeUploadData(data):
     try:
@@ -177,6 +253,18 @@ def getYahooCsvData(csvPath):
             date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
             tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
             yield [yclid, 'real_cv', tdate, row[9], 'JPY']
+
+def getYahooCsvDataLinkA(csvPath):
+    with open(csvPath, newline='', encoding='utf-16-le') as csvfile:
+        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
+        next(buf)
+        for row in buf:
+            index = row[13].find('yclid=YSS')
+            if index == -1:
+                continue
+            yclid = row[13].split('yclid=')[1]
+            reward = int(row[6]) / 1.1
+            yield [yclid, 'real_cv', row[2], round(reward), 'JPY']
 
 def createCsvFile(data, outputFilePath):
     header = ["YCLID","コンバージョン名","コンバージョン発生日時","1コンバージョンあたりの価値","通貨コード"]
@@ -297,23 +385,34 @@ def checkUploadStatus(length, uploadId):
 if __name__ == '__main__':
 
     try:
-        downloadsDirPath = './csv'
-        os.makedirs(downloadsDirPath, exist_ok=True)
+        afbDirPath = './csv/afb'
+        os.makedirs(afbDirPath, exist_ok=True)
+        linkaDirPath = './csv/linka'
+        os.makedirs(linkaDirPath, exist_ok=True)
         outputDirPath = './output'
         outputFileName = '育毛剤YSS_CV戻し.csv'
         os.makedirs(outputDirPath, exist_ok=True)
         outputFilePath = f'{outputDirPath}/{outputFileName}'
 
         logger.debug("import_offline_conversion: start import_csv_from_afb")
-        importCsvFromAfb(downloadsDirPath)
-        csvPath = getLatestDownloadedFileName(downloadsDirPath)
-        logger.info(f"import_offline_conversion: complete download: {csvPath}")
+        importCsvFromAfb(afbDirPath)
+        afbCsvPath = getLatestDownloadedFileName(afbDirPath)
+        logger.info(f"import_offline_conversion: complete download: {afbCsvPath}")
 
-        data = list(getGoogleCsvData(csvPath))
+        logger.debug("import_offline_conversion: start import_csv_from_linka")
+        importCsvFromLinkA(linkaDirPath)
+        linkaCsvPath = getLatestDownloadedFileName(linkaDirPath)
+        logger.info(f"import_offline_conversion: complete download: {linkaCsvPath}")
+
+        data = list(getGoogleCsvData(afbCsvPath))
+        data.extend(list(getGoogleCsvDataLinkA(linkaCsvPath)))
+        data = get_unique_list(data)
         logger.info(f'google: {data}')
         writeUploadData(data)
 
-        data = list(getYahooCsvData(csvPath))
+        data = list(getYahooCsvData(afbCsvPath))
+        data.extend(list(getYahooCsvDataLinkA(linkaCsvPath)))
+        data = get_unique_list(data)
         logger.info(f'yahoo: {data}')
         length = len(data)
         if length == 0:
