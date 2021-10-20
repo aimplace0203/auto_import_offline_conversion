@@ -264,7 +264,9 @@ def getYahooCsvDataLinkA(csvPath):
                 continue
             yclid = row[13].split('yclid=')[1]
             reward = int(row[6]) / 1.1
-            yield [yclid, 'real_cv', row[2], round(reward), 'JPY']
+            date = datetime.datetime.strptime(row[2], '%Y/%m/%d %H:%M:%S')
+            tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
+            yield [yclid, 'real_cv', tdate, round(reward), 'JPY']
 
 def createCsvFile(data, outputFilePath):
     header = ["YCLID","コンバージョン名","コンバージョン発生日時","1コンバージョンあたりの価値","通貨コード"]
