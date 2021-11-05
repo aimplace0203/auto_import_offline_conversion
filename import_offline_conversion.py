@@ -75,7 +75,7 @@ def importCsvFromAfb(downloadsDirPath):
         driver.implicitly_wait(30)
 
         driver.find_element_by_xpath('//input[@src="/assets/img/report/btn_original_csv.gif"]').click()
-        driver.implicitly_wait(60)
+        sleep(10)
 
         driver.close()
         driver.quit()
@@ -134,7 +134,7 @@ def importCsvFromLinkA(downloadsDirPath):
         driver.implicitly_wait(30)
 
         driver.find_element_by_class_name('partnerMain-btn-md').click()
-        driver.implicitly_wait(30)
+        sleep(10)
 
         driver.close()
         driver.quit()
