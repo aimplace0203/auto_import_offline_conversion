@@ -52,30 +52,30 @@ def importCsvFromAfb(downloadsDirPath):
         
         driver.get(url)
         driver.maximize_window()
-        sleep(2)
+        driver.implicitly_wait(30)
 
         driver.find_element_by_xpath('//input[@name="login_name"]').send_keys(login)
         driver.find_element_by_xpath('//input[@name="password"]').send_keys(password)
         driver.find_element_by_xpath('//input[@type="submit"]').click()
 
         logger.debug('importCsvFromAfb: afb login')
-        sleep(5)
+        driver.implicitly_wait(60)
         
         driver.find_element_by_xpath('//a[@href="/pa/result/"]').click()
-        sleep(2)
+        driver.implicitly_wait(30)
         driver.find_element_by_xpath('//a[@href="javascript:void(0)"]').click()
-        sleep(2)
+        driver.implicitly_wait(30)
         driver.find_element_by_id('site_select_chzn_o_1').click()
 
         logger.info('importCsvFromAfb: select site')
-        sleep(2)
+        driver.implicitly_wait(30)
 
         driver.find_element_by_xpath('//input[@value="ytd"]').click()
         logger.info('importCsvFromAfb: select date range')
-        sleep(1)
+        driver.implicitly_wait(30)
 
         driver.find_element_by_xpath('//input[@src="/assets/img/report/btn_original_csv.gif"]').click()
-        sleep(10)
+        driver.implicitly_wait(60)
 
         driver.close()
         driver.quit()
@@ -107,34 +107,34 @@ def importCsvFromLinkA(downloadsDirPath):
 
         driver.get(url)
         driver.maximize_window()
-        sleep(2)
+        driver.implicitly_wait(30)
 
         driver.find_element_by_id('login_id').send_keys(login)
         driver.find_element_by_id('password').send_keys(password)
         driver.find_element_by_xpath('//input[@type="submit"]').click()
 
         logger.debug('importCsvFromLinkA: linka login')
-        sleep(5)
+        driver.implicitly_wait(60)
 
         driver.find_element_by_xpath('//a[@href="/partner/achievements"]').click()
-        sleep(2)
+        driver.implicitly_wait(30)
 
         driver.find_elements_by_id('occurrence_time_occurrence_time')[1].click()
-        sleep(2)
+        driver.implicitly_wait(30)
 
         logger.info('importCsvFromLinkA: select date range')
-        sleep(1)
+        driver.implicitly_wait(30)
 
         driver.find_element_by_xpath('//input[@value="検索"]').click()
-        sleep(5)
+        driver.implicitly_wait(30)
 
         dropdown = driver.find_element_by_id("separator")
         select = Select(dropdown)
         select.select_by_value('comma')
-        sleep(2)
+        driver.implicitly_wait(30)
 
         driver.find_element_by_class_name('partnerMain-btn-md').click()
-        sleep(2)
+        driver.implicitly_wait(30)
 
         driver.close()
         driver.quit()
