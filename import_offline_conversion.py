@@ -56,7 +56,7 @@ def importCsvFromAfb(downloadsDirPath):
 
         driver.find_element_by_xpath('//input[@name="login_name"]').send_keys(login)
         driver.find_element_by_xpath('//input[@name="password"]').send_keys(password)
-        driver.find_element_by_xpath('//input[@type="submit"]').click()
+        driver.find_element_by_xpath('//button[@type="submit"]').click()
 
         logger.debug('importCsvFromAfb: afb login')
         driver.implicitly_wait(60)
