@@ -65,7 +65,7 @@ def importCsvFromAfb(downloadsDirPath):
         driver.implicitly_wait(30)
         driver.find_element_by_xpath('//a[@href="javascript:void(0)"]').click()
         driver.implicitly_wait(30)
-        driver.find_element_by_id('site_select_chzn_o_1').click()
+        driver.find_element_by_id('site_select_chzn_o_14').click()
 
         logger.info('importCsvFromAfb: select site')
         driver.implicitly_wait(30)
