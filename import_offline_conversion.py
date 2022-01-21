@@ -80,7 +80,7 @@ def importCsvFromAfb(downloadsDirPath, no):
         logger.info('importCsvFromAfb: select site')
         driver.implicitly_wait(30)
 
-        driver.find_element_by_xpath('//input[@value="ytd"]').click()
+        driver.find_element_by_xpath('//input[@value="td"]').click()
         logger.info('importCsvFromAfb: select date range')
         driver.implicitly_wait(30)
 
@@ -129,7 +129,7 @@ def importCsvFromLinkA(downloadsDirPath):
         driver.find_element_by_xpath('//a[@href="/partner/achievements"]').click()
         driver.implicitly_wait(30)
 
-        driver.find_elements_by_id('occurrence_time_occurrence_time')[1].click()
+        driver.find_elements_by_id('occurrence_time_occurrence_time')[0].click()
         driver.implicitly_wait(30)
 
         logger.info('importCsvFromLinkA: select date range')
