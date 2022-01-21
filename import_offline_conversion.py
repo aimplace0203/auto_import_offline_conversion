@@ -28,7 +28,7 @@ logger.addHandler(handler)
 logger.propagate = False
 
 ### functions ###
-def importCsvFromAfb(downloadsDirPath):
+def importCsvFromAfb(downloadsDirPath, no):
     url = "https://www.afi-b.com/"
     login = os.environ['AFB_ID']
     password = os.environ['AFB_PASS']
@@ -65,7 +65,17 @@ def importCsvFromAfb(downloadsDirPath):
         driver.implicitly_wait(30)
         driver.find_element_by_xpath('//a[@href="javascript:void(0)"]').click()
         driver.implicitly_wait(30)
-        driver.find_element_by_id('site_select_chzn_o_14').click()
+        select = driver.find_element_by_id(f'site_select_chzn_o_{no}')
+        if not (re.search(r'822434', select.text) or re.search(r'806580', select.text)):
+            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+            message += 'インポートに失敗しました。\n'
+            message += 'AFBのCSV取込処理における対象サイトに不備があります。\n'
+            message += '担当者は実行ログの確認を行ってください。\n\n'
+            message += f'対象サイト：{select.text}\n'
+            message += '[/info]\n'
+            sendChatworkNotification(message)
+            exit(1)
+        select.click()
 
         logger.info('importCsvFromAfb: select site')
         driver.implicitly_wait(30)
@@ -383,36 +393,42 @@ def checkUploadStatus(length, uploadId):
         logger.debug(f'Error: checkUploadStatus: {err}')
         exit(1)
 
+def getCsvPath(dirPath, taskName, no):
+    os.makedirs(dirPath, exist_ok=True)
+    logger.debug(f"import_offline_conversion: start import_csv_from_{taskName}")
+
+    if taskName == "linka":
+        importCsvFromLinkA(dirPath)
+    else:
+        importCsvFromAfb(dirPath, no)
+
+    csvPath = getLatestDownloadedFileName(dirPath)
+    logger.info(f"import_offline_conversion: complete download: {csvPath}")
+
+    return csvPath
+
 ### main_script ###
 if __name__ == '__main__':
 
     try:
-        afbDirPath = './csv/afb'
-        os.makedirs(afbDirPath, exist_ok=True)
-        linkaDirPath = './csv/linka'
-        os.makedirs(linkaDirPath, exist_ok=True)
         outputDirPath = './output'
         outputFileName = '育毛剤YSS_CV戻し.csv'
         os.makedirs(outputDirPath, exist_ok=True)
         outputFilePath = f'{outputDirPath}/{outputFileName}'
 
-        logger.debug("import_offline_conversion: start import_csv_from_afb")
-        importCsvFromAfb(afbDirPath)
-        afbCsvPath = getLatestDownloadedFileName(afbDirPath)
-        logger.info(f"import_offline_conversion: complete download: {afbCsvPath}")
+        afbCsvPath1 = getCsvPath('./csv/afb1', 'afb1', '14')
+        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '20')
+        linkaCsvPath = getCsvPath('./csv/linka', 'linka', None)
 
-        logger.debug("import_offline_conversion: start import_csv_from_linka")
-        importCsvFromLinkA(linkaDirPath)
-        linkaCsvPath = getLatestDownloadedFileName(linkaDirPath)
-        logger.info(f"import_offline_conversion: complete download: {linkaCsvPath}")
-
-        data = list(getGoogleCsvData(afbCsvPath))
+        data = list(getGoogleCsvData(afbCsvPath1))
+        data.extend(list(getGoogleCsvData(afbCsvPath2)))
         data.extend(list(getGoogleCsvDataLinkA(linkaCsvPath)))
         data = get_unique_list(data)
         logger.info(f'google: {data}')
         writeUploadData(data)
 
-        data = list(getYahooCsvData(afbCsvPath))
+        data = list(getYahooCsvData(afbCsvPath1))
+        data.extend(list(getYahooCsvData(afbCsvPath2)))
         data.extend(list(getYahooCsvDataLinkA(linkaCsvPath)))
         data = get_unique_list(data)
         logger.info(f'yahoo: {data}')
