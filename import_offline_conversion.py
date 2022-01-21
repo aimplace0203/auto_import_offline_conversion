@@ -1,6 +1,7 @@
 import os
 import re
 import csv
+import sys
 import json
 import shutil
 import datetime
@@ -28,10 +29,16 @@ logger.addHandler(handler)
 logger.propagate = False
 
 ### functions ###
-def importCsvFromAfb(downloadsDirPath, no):
+def importCsvFromAfb(downloadsDirPath, no, d):
     url = "https://www.afi-b.com/"
     login = os.environ['AFB_ID']
     password = os.environ['AFB_PASS']
+
+    logger.debug(d)
+    if d == 0:
+        da = "td"
+    elif d == 1:
+        da = "ytd"
     
     ua = UserAgent()
     logger.debug(f'importCsvFromAfb: UserAgent: {ua.chrome}')
@@ -80,7 +87,7 @@ def importCsvFromAfb(downloadsDirPath, no):
         logger.info('importCsvFromAfb: select site')
         driver.implicitly_wait(30)
 
-        driver.find_element_by_xpath('//input[@value="td"]').click()
+        driver.find_element_by_xpath(f'//input[@value="{da}"]').click()
         logger.info('importCsvFromAfb: select date range')
         driver.implicitly_wait(30)
 
@@ -93,7 +100,7 @@ def importCsvFromAfb(downloadsDirPath, no):
         logger.debug(f'Error: importCsvFromAfb: {err}')
         exit(1)
 
-def importCsvFromLinkA(downloadsDirPath):
+def importCsvFromLinkA(downloadsDirPath, d):
     url = "https://link-ag.net/partner/sign_in"
     login = os.environ['LINKA_ID']
     password = os.environ['LINKA_PASS']
@@ -129,7 +136,7 @@ def importCsvFromLinkA(downloadsDirPath):
         driver.find_element_by_xpath('//a[@href="/partner/achievements"]').click()
         driver.implicitly_wait(30)
 
-        driver.find_elements_by_id('occurrence_time_occurrence_time')[0].click()
+        driver.find_elements_by_id('occurrence_time_occurrence_time')[d].click()
         driver.implicitly_wait(30)
 
         logger.info('importCsvFromLinkA: select date range')
@@ -393,14 +400,14 @@ def checkUploadStatus(length, uploadId):
         logger.debug(f'Error: checkUploadStatus: {err}')
         exit(1)
 
-def getCsvPath(dirPath, taskName, no):
+def getCsvPath(dirPath, taskName, no, d):
     os.makedirs(dirPath, exist_ok=True)
     logger.debug(f"import_offline_conversion: start import_csv_from_{taskName}")
 
     if taskName == "linka":
-        importCsvFromLinkA(dirPath)
+        importCsvFromLinkA(dirPath, d)
     else:
-        importCsvFromAfb(dirPath, no)
+        importCsvFromAfb(dirPath, no, d)
 
     csvPath = getLatestDownloadedFileName(dirPath)
     logger.info(f"import_offline_conversion: complete download: {csvPath}")
@@ -410,15 +417,19 @@ def getCsvPath(dirPath, taskName, no):
 ### main_script ###
 if __name__ == '__main__':
 
+    d = 0
+    if len(sys.argv) > 1:
+        d = int(sys.argv[1])
+
     try:
         outputDirPath = './output'
         outputFileName = '育毛剤YSS_CV戻し.csv'
         os.makedirs(outputDirPath, exist_ok=True)
         outputFilePath = f'{outputDirPath}/{outputFileName}'
 
-        afbCsvPath1 = getCsvPath('./csv/afb1', 'afb1', '14')
-        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '20')
-        linkaCsvPath = getCsvPath('./csv/linka', 'linka', None)
+        afbCsvPath1 = getCsvPath('./csv/afb1', 'afb1', '14', d)
+        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '20', d)
+        linkaCsvPath = getCsvPath('./csv/linka', 'linka', None, d)
 
         data = list(getGoogleCsvData(afbCsvPath1))
         data.extend(list(getGoogleCsvData(afbCsvPath2)))
