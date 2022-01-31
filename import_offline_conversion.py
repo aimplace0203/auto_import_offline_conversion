@@ -427,8 +427,8 @@ if __name__ == '__main__':
         os.makedirs(outputDirPath, exist_ok=True)
         outputFilePath = f'{outputDirPath}/{outputFileName}'
 
-        afbCsvPath1 = getCsvPath('./csv/afb1', 'afb1', '14', d)
-        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '20', d)
+        afbCsvPath1 = getCsvPath('./csv/afb1', 'afb1', '1', d)
+        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '2', d)
         linkaCsvPath = getCsvPath('./csv/linka', 'linka', None, d)
 
         data = list(getGoogleCsvData(afbCsvPath1))
