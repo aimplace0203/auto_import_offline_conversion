@@ -308,7 +308,7 @@ def getAccessToken():
 
 def uploadCsvFile(length, outputFileName, outputFilePath):
     try:
-        url_api = 'https://ads-search.yahooapis.jp/api/v6/OfflineConversionService/upload'
+        url_api = 'https://ads-search.yahooapis.jp/api/v7/OfflineConversionService/upload'
         headers = { 'Authorization': f'Bearer {getAccessToken()}' }
         files = { 'file': open(outputFilePath, mode='rb') }
         params = {
@@ -351,7 +351,7 @@ def uploadCsvFile(length, outputFileName, outputFilePath):
 
 def checkUploadStatus(length, uploadId):
     try:
-        url_api = f'https://ads-search.yahooapis.jp/api/v6/OfflineConversionService/get'
+        url_api = f'https://ads-search.yahooapis.jp/api/v7/OfflineConversionService/get'
         headers = { 'Authorization': f'Bearer {getAccessToken()}' }
         params = {
                 'accountId': os.environ["YAHOO_ACCOUNT_ID"],
