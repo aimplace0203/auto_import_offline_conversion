@@ -421,7 +421,8 @@ if __name__ == '__main__':
     dateMsg = "本日"
     if len(sys.argv) > 1:
         d = int(sys.argv[1])
-        dateMsg = "昨日"
+        if d == 1:
+            dateMsg = "昨日"
 
     try:
         outputDirPath = './output'
