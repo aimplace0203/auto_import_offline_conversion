@@ -208,7 +208,7 @@ def getGoogleCsvDataLinkA(csvPath):
             reward = int(row[6]) / 1.1
             yield [gclid, 'real_cv2', row[2], round(reward), 'JPY']
 
-def writeUploadData(data):
+def writeUploadData(data, dateMsg):
     try:
         SPREADSHEET_ID = os.environ['CONVERSION_IMPORT_SSID']
         scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
@@ -227,7 +227,7 @@ def writeUploadData(data):
         length = len(data)
         if length == 0:
             message = "[info][title]【Google】オフラインコンバージョンのインポート結果[/title]\n"
-            message += f'昨日のGSN発生件数は {length} 件です。[/info]'
+            message += f'{dateMsg}のGSN発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             return
 
@@ -250,7 +250,7 @@ def writeUploadData(data):
         message = "[info][title]【Google】オフラインコンバージョンのインポート結果[/title]\n"
         message += 'スプレッドシートへのデータ入力が完了しました。\n'
         message += '入力されたデータは 7:00AM に自動でアップロードされます。\n\n'
-        message += f'昨日のGSN発生件数は {length} 件です。[/info]'
+        message += f'{dateMsg}のGSN発生件数は {length} 件です。[/info]'
         sendChatworkNotification(message)
         return
     except Exception as err:
@@ -306,7 +306,7 @@ def getAccessToken():
         logger.error(f'Error: getAccessToken: {err}')
         exit(1)
 
-def uploadCsvFile(length, outputFileName, outputFilePath):
+def uploadCsvFile(length, outputFileName, outputFilePath, dateMsg):
     try:
         url_api = 'https://ads-search.yahooapis.jp/api/v7/OfflineConversionService/upload'
         headers = { 'Authorization': f'Bearer {getAccessToken()}' }
@@ -326,7 +326,7 @@ def uploadCsvFile(length, outputFileName, outputFilePath):
             message += 'インポートに失敗しました。\n'
             message += '担当者は実行ログの確認を行ってください。\n\n'
             message += f'ステータスコード：{req.status_code}\n\n'
-            message += f'昨日のYSS発生件数は {length} 件です。[/info]'
+            message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
 
@@ -339,7 +339,7 @@ def uploadCsvFile(length, outputFileName, outputFilePath):
             message += f'エラーコード：{errors["code"]}\n'
             message += f'エラーメッセージ：{errors["message"]}\n'
             message += f'エラー詳細：{errors["details"]}\n\n'
-            message += f'昨日のYSS発生件数は {length} 件です。[/info]'
+            message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
         
@@ -349,7 +349,7 @@ def uploadCsvFile(length, outputFileName, outputFilePath):
         logger.debug(f'Error: uploadCsvFile: {err}')
         exit(1)
 
-def checkUploadStatus(length, uploadId):
+def checkUploadStatus(length, uploadId, dateMsg):
     try:
         url_api = f'https://ads-search.yahooapis.jp/api/v7/OfflineConversionService/get'
         headers = { 'Authorization': f'Bearer {getAccessToken()}' }
@@ -367,7 +367,7 @@ def checkUploadStatus(length, uploadId):
             message += 'インポート結果の取得に失敗しました。\n'
             message += '担当者はYahoo!広告管理画面からインポート結果の確認を行ってください。\n\n'
             message += f'ステータスコード：{req.status_code}\n\n'
-            message += f'昨日のYSS発生件数は {length} 件です。[/info]'
+            message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
 
@@ -380,7 +380,7 @@ def checkUploadStatus(length, uploadId):
             message += f'エラーコード：{errors["code"]}\n'
             message += f'エラーメッセージ：{errors["message"]}\n'
             message += f'エラー詳細：{errors["details"]}\n\n'
-            message += f'昨日のYSS発生件数は {length} 件です。[/info]'
+            message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
 
@@ -393,7 +393,7 @@ def checkUploadStatus(length, uploadId):
             message += f'アップロード日時：{result["uploadedDate"]}\n'
             message += f'ステータス：{result["processStatus"]}\n\n'
 
-        message += f'昨日のYSS発生件数は {length} 件です。[/info]'
+        message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
         sendChatworkNotification(message)
 
     except Exception as err:
@@ -418,8 +418,10 @@ def getCsvPath(dirPath, taskName, no, d):
 if __name__ == '__main__':
 
     d = 0
+    dateMsg = "本日"
     if len(sys.argv) > 1:
         d = int(sys.argv[1])
+        dateMsg = "昨日"
 
     try:
         outputDirPath = './output'
@@ -436,7 +438,7 @@ if __name__ == '__main__':
         data.extend(list(getGoogleCsvDataLinkA(linkaCsvPath)))
         data = get_unique_list(data)
         logger.info(f'google: {data}')
-        writeUploadData(data)
+        writeUploadData(data, dateMsg)
 
         data = list(getYahooCsvData(afbCsvPath1))
         data.extend(list(getYahooCsvData(afbCsvPath2)))
@@ -446,7 +448,7 @@ if __name__ == '__main__':
         length = len(data)
         if length == 0:
             message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-            message += '昨日のYSS発生件数は 0 件です。[/info]'
+            message += f'{dateMsg}のYSS発生件数は 0 件です。[/info]'
             sendChatworkNotification(message)
             exit(0)
         elif length % 2 != 0:
@@ -454,25 +456,25 @@ if __name__ == '__main__':
             createCsvFile(data, outputFilePath)
 
             logger.info("import_offline_conversion: uploadCsvFile")
-            uploadId = uploadCsvFile(length, outputFileName, outputFilePath)
+            uploadId = uploadCsvFile(length, outputFileName, outputFilePath, dateMsg)
         else:
             data2 = [data.pop(0)]
 
             logger.info("import_offline_conversion: data: createCsvFile")
             createCsvFile(data, outputFilePath)
             logger.info("import_offline_conversion: data: uploadCsvFile")
-            uploadId = uploadCsvFile(length, outputFileName, outputFilePath)
+            uploadId = uploadCsvFile(length, outputFileName, outputFilePath, dateMsg)
             sleep(5)
 
             logger.info("import_offline_conversion: data2: createCsvFile")
             createCsvFile(data2, outputFilePath)
             logger.info("import_offline_conversion: data2: uploadCsvFile")
-            uploadId.extend(uploadCsvFile(length, outputFileName, outputFilePath))
+            uploadId.extend(uploadCsvFile(length, outputFileName, outputFilePath, dateMsg))
 
         sleep(15)
         logger.info(f"import_offline_conversion: uploadId -> {uploadId}")
         logger.info("import_offline_conversion: checkUploadStatus")
-        checkUploadStatus(length, uploadId)
+        checkUploadStatus(length, uploadId, dateMsg)
 
         logger.info("import_offline_conversion: Finish")
         exit(0)
