@@ -248,8 +248,7 @@ def writeUploadData(data, dateMsg):
 
         sheet.update_cells(cell_list, value_input_option='USER_ENTERED')
         message = "[info][title]【Google】オフラインコンバージョンのインポート結果[/title]\n"
-        message += 'スプレッドシートへのデータ入力が完了しました。\n'
-        message += '入力されたデータは 7:00AM に自動でアップロードされます。\n\n'
+        message += 'スプレッドシートへのデータ入力が完了しました。\n\n'
         message += f'{dateMsg}のGSN発生件数は {length} 件です。[/info]'
         sendChatworkNotification(message)
         return
