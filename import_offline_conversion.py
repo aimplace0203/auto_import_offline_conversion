@@ -73,7 +73,7 @@ def importCsvFromAfb(downloadsDirPath, no, d):
         driver.find_element_by_xpath('//a[@href="javascript:void(0)"]').click()
         driver.implicitly_wait(30)
         select = driver.find_element_by_id(f'site_select_chzn_o_{no}')
-        if not (re.search(r'822434', select.text) or re.search(r'806580', select.text)):
+        if not (re.search(r'845657', select.text) or re.search(r'806580', select.text)):
             message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
             message += 'インポートに失敗しました。\n'
             message += 'AFBのCSV取込処理における対象サイトに不備があります。\n'
@@ -430,7 +430,7 @@ if __name__ == '__main__':
         outputFilePath = f'{outputDirPath}/{outputFileName}'
 
         afbCsvPath1 = getCsvPath('./csv/afb1', 'afb1', '1', d)
-        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '2', d)
+        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '5', d)
         linkaCsvPath = getCsvPath('./csv/linka', 'linka', None, d)
 
         data = list(getGoogleCsvData(afbCsvPath1))
