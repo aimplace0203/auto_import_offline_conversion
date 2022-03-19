@@ -201,10 +201,9 @@ def getGoogleCsvDataLinkA(csvPath):
         next(buf)
         for row in buf:
             print(row)
-            index = row[13].find('gclid=')
-            if index == -1:
+            gclid = row[20]
+            if gclid == "":
                 continue
-            gclid = row[13].split('gclid=')[1]
             reward = int(row[6]) / 1.1
             yield [gclid, 'real_cv2', row[2], round(reward), 'JPY']
 
@@ -275,10 +274,9 @@ def getYahooCsvDataLinkA(csvPath):
         buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
         next(buf)
         for row in buf:
-            index = row[13].find('yclid=YSS')
-            if index == -1:
+            yclid = row[21]
+            if yclid == "":
                 continue
-            yclid = row[13].split('yclid=')[1]
             reward = int(row[6]) / 1.1
             date = datetime.datetime.strptime(row[2], '%Y/%m/%d %H:%M:%S')
             tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
