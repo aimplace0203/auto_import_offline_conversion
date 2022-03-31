@@ -428,7 +428,7 @@ if __name__ == '__main__':
         outputFilePath = f'{outputDirPath}/{outputFileName}'
 
         afbCsvPath1 = getCsvPath('./csv/afb1', 'afb1', '1', d)
-        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '4', d)
+        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '3', d)
         linkaCsvPath = getCsvPath('./csv/linka', 'linka', None, d)
 
         data = list(getGoogleCsvData(afbCsvPath1))
