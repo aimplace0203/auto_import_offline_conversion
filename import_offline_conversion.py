@@ -337,6 +337,7 @@ if __name__ == '__main__':
 
         if len(bi.data) > 0:
             bi.upload_offline_cv()
+            sleep(10)
             bi.check_upload_status()
         else:
             message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
