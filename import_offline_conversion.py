@@ -1,21 +1,21 @@
-import os
-import re
 import csv
-import sys
-import json
-import shutil
+import chromedriver_binary
 import datetime
+import json
+import os
+import pandas as pd
 import requests
-import gspread
-from time import sleep
-from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.select import Select
-from fake_useragent import UserAgent
-from webdriver_manager.chrome import ChromeDriverManager
-from oauth2client.service_account import ServiceAccountCredentials
+from selenium.webdriver.common.by import By
+import sys
+from time import sleep
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 # Logger setting
 from logging import getLogger, FileHandler, DEBUG
@@ -28,453 +28,316 @@ logger.setLevel(DEBUG)
 logger.addHandler(handler)
 logger.propagate = False
 
-### functions ###
-def importCsvFromAfb(downloadsDirPath, no, d):
-    url = "https://www.afi-b.com/"
-    login = os.environ['AFB_ID']
-    password = os.environ['AFB_PASS']
 
-    logger.debug(d)
-    if d == 0:
-        da = "td"
-    elif d == 1:
-        da = "ytd"
-    
-    ua = UserAgent()
-    logger.debug(f'importCsvFromAfb: UserAgent: {ua.chrome}')
+class BasicInfo():
+    def __init__(self, days=0):
+        self.date = today - datetime.timedelta(days=days)
+        self.csv_path = './csv'
+        os.makedirs(self.csv_path, exist_ok=True)
+        self.output_path = './output'
+        os.makedirs(self.output_path, exist_ok=True)
+        self.output_file_name = '育毛剤YSS_CV戻し.csv'
+        self.access_token = self.get_access_token()
 
-    options = Options()
-    options.add_argument(f'user-agent={ua.chrome}')
+        options = Options()
+        #options.add_argument('--headless')
+        #options.add_argument('--no-sandbox')
 
-    prefs = {
-        "profile.default_content_settings.popups": 1,
-        "download.default_directory": 
-                os.path.abspath(downloadsDirPath),
-        "directory_upgrade": True
-    }
-    options.add_experimental_option("prefs", prefs)
-    
-    try:
-        driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
-        
-        driver.get(url)
-        driver.maximize_window()
-        driver.implicitly_wait(30)
+        prefs = {
+            "profile.default_content_settings.popups": 1,
+            "download.default_directory": os.path.abspath(self.csv_path),
+            "directory_upgrade": True
+        }
+        options.add_experimental_option("prefs", prefs)
 
-        driver.find_element_by_xpath('//input[@name="login_name"]').send_keys(login)
-        driver.find_element_by_xpath('//input[@name="password"]').send_keys(password)
-        driver.find_element_by_xpath('//button[@type="submit"]').click()
+        self.driver = webdriver.Chrome(options=options)
+        self.columns = ["YCLID", "コンバージョン名", "コンバージョン発生日時", "1コンバージョンあたりの価値", "通貨コード"]
+        self.data = []
 
-        logger.debug('importCsvFromAfb: afb login')
-        driver.implicitly_wait(60)
-        
-        driver.find_element_by_xpath('//a[@href="/pa/result/"]').click()
-        driver.implicitly_wait(30)
-        driver.find_element_by_xpath('//a[@href="javascript:void(0)"]').click()
-        driver.implicitly_wait(30)
-        select = driver.find_element_by_id(f'site_select_chzn_o_{no}')
-        if not (re.search(r'845657', select.text) or re.search(r'806580', select.text)):
-            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-            message += 'インポートに失敗しました。\n'
-            message += 'AFBのCSV取込処理における対象サイトに不備があります。\n'
-            message += '担当者は実行ログの確認を行ってください。\n\n'
-            message += f'対象サイト：{select.text}\n'
-            message += '[/info]\n'
-            sendChatworkNotification(message)
+    def get_access_token(self):
+        try:
+            url_token = f'https://biz-oauth.yahoo.co.jp/oauth/v1/token?grant_type=refresh_token' \
+                    f'&client_id={os.environ["YAHOO_CLIENT_ID"]}' \
+                    f'&client_secret={os.environ["YAHOO_CLIENT_SECRET"]}' \
+                    f'&refresh_token={os.environ["YAHOO_REFRESH_TOKEN"]}'
+            req = requests.get(url_token)
+            body = json.loads(req.text)
+            access_token = body['access_token']
+            return access_token
+        except Exception as err:
+            logger.error(f'Error: get_access_token: {err}')
             exit(1)
-        select.click()
 
-        logger.info('importCsvFromAfb: select site')
-        driver.implicitly_wait(30)
+    def get_latest_downloaded_csv(self, path):
+        if len(os.listdir(path)) == 0:
+            return None
+        return max (
+            [path + '/' + f for f in os.listdir(path)],
+            key=os.path.getctime
+        )
 
-        driver.find_element_by_xpath(f'//input[@value="{da}"]').click()
-        logger.info('importCsvFromAfb: select date range')
-        driver.implicitly_wait(30)
+    def send_chatwork_notification(self, message):
+        try:
+            url = f'https://api.chatwork.com/v2/rooms/{os.environ["CHATWORK_ROOM_ID"]}/messages'
+            headers = { 'X-ChatWorkToken': os.environ["CHATWORK_API_TOKEN"] }
+            params = { 'body': message }
+            requests.post(url, headers=headers, params=params)
+        except Exception as err:
+            logger.error(f'Error: sendChatworkNotification: {err}')
+            exit(1)
 
-        driver.find_element_by_xpath('//input[@src="/assets/img/report/btn_original_csv.gif"]').click()
-        sleep(10)
+    def import_rentracks(self):
+        url = "https://manage.rentracks.jp/manage/login"
+        login = os.environ['RENTRACKS_ID']
+        password = os.environ['RENTRACKS_PW']
 
-        driver.close()
-        driver.quit()
-    except Exception as err:
-        logger.debug(f'Error: importCsvFromAfb: {err}')
-        exit(1)
+        try:
+            self.driver.get(url)
+            self.driver.maximize_window()
+            self.driver.implicitly_wait(30)
 
-def importCsvFromLinkA(downloadsDirPath, d):
-    url = "https://link-ag.net/partner/sign_in"
-    login = os.environ['LINKA_ID']
-    password = os.environ['LINKA_PASS']
+            self.driver.find_element(By.NAME, 'idMailaddress').send_keys(login)
+            self.driver.find_element(By.NAME, 'idLoginPassword').send_keys(password)
+            self.driver.find_element(By.NAME, 'idButton').click()
+            logger.debug('import_rentracks: login')
 
-    ua = UserAgent()
-    logger.debug(f'importCsvFromLinkA: UserAgent: {ua.chrome}')
+            self.driver.implicitly_wait(60)
+            self.driver.find_element(By.ID, 'main')
 
-    options = Options()
-    options.add_argument(f'user-agent={ua.chrome}')
+            self.driver.get('https://manage.rentracks.jp/manage/detail_sales')
+            logger.debug('import_rentracks: move to detail_sales')
+            self.driver.implicitly_wait(20)
 
-    prefs = {
-        "profile.default_content_settings.popups": 1,
-        "download.default_directory":
-                os.path.abspath(downloadsDirPath),
-        "directory_upgrade": True
-    }
-    options.add_experimental_option("prefs", prefs)
+            select = Select(self.driver.find_element(By.ID, 'idGogoYear'))
+            select.select_by_value(self.date.strftime('%Y'))
+            select = Select(self.driver.find_element(By.ID, 'idGogoMonth'))
+            select.select_by_value(self.date.strftime('%-m'))
+            select = Select(self.driver.find_element(By.ID, 'idGogoDay'))
+            select.select_by_value(self.date.strftime('%-d'))
 
-    try:
-        driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+            select = Select(self.driver.find_element(By.ID, 'idDoneYear'))
+            select.select_by_value(self.date.strftime('%Y'))
+            select = Select(self.driver.find_element(By.ID, 'idDoneMonth'))
+            select.select_by_value(self.date.strftime('%-m'))
+            select = Select(self.driver.find_element(By.ID, 'idDoneDay'))
+            select.select_by_value(self.date.strftime('%-d'))
 
-        driver.get(url)
-        driver.maximize_window()
-        driver.implicitly_wait(30)
+            sleep(2)
+            logger.debug('import_rentracks: select date')
 
-        driver.find_element_by_id('login_id').send_keys(login)
-        driver.find_element_by_id('password').send_keys(password)
-        driver.find_element_by_xpath('//input[@type="submit"]').click()
+            self.driver.find_element(By.NAME, 'idButtonFD').click()
+            sleep(2)
 
-        logger.debug('importCsvFromLinkA: linka login')
-        driver.implicitly_wait(60)
+            file_path = self.get_latest_downloaded_csv(self.csv_path)
+            logger.debug(f'import_rentracks: file_path -> {file_path}')
 
-        driver.find_element_by_xpath('//a[@href="/partner/achievements"]').click()
-        driver.implicitly_wait(30)
+            df = pd.read_csv(file_path, encoding='cp932')
+            filtered_df = df[
+                df['リファラー'].str.contains('yclid=', na=False) & 
+                df['サイト名'].str.contains('クリニックフォア', na=False)
+            ]
 
-        driver.find_elements_by_id('occurrence_time_occurrence_time')[d].click()
-        driver.implicitly_wait(30)
+            for index, row in filtered_df.iterrows():
+                yclid = row['リファラー'].split('yclid=')[1]
+                date_str = row['売上日時']
+                clean_date_str = date_str.split('（')[0] + date_str.split('）')[1]
+                date = datetime.datetime.strptime(clean_date_str, '%Y/%m/%d %H:%M:%S')
+                tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
+                self.data.append([yclid, 'オフラインCV', tdate, '39000', 'JPY'])
 
-        logger.info('importCsvFromLinkA: select date range')
-        driver.implicitly_wait(30)
+            os.remove(file_path)
+            logger.debug(f'import_rentracks: data -> {self.data}')
 
-        driver.find_element_by_xpath('//input[@value="検索"]').click()
-        driver.implicitly_wait(30)
+        except Exception as err:
+            logger.debug(f'Error: import_rentracks: {err}')
+            self.driver.close()
+            self.driver.quit()
+            exit(1)
 
-        dropdown = driver.find_element_by_id("separator")
-        select = Select(dropdown)
-        select.select_by_value('comma')
-        driver.implicitly_wait(30)
+    def import_felmat(self):
+        url = "https://www.felmat.net/publisher/login"
+        login = os.environ['FELMAT_ID']
+        password = os.environ['FELMAT_PW']
 
-        driver.find_element_by_class_name('partnerMain-btn-md').click()
-        sleep(10)
+        try:
+            self.driver.get(url)
+            self.driver.maximize_window()
+            self.driver.implicitly_wait(30)
 
-        driver.close()
-        driver.quit()
-    except Exception as err:
-        logger.debug(f'Error: importCsvFromLinkA: {err}')
-        exit(1)
+            self.driver.find_element(By.ID, 'p_username').send_keys(login)
+            self.driver.find_element(By.ID, 'p_password').send_keys(password)
+            self.driver.find_element(By.NAME, 'partnerlogin').click()
+            logger.debug('import_felmat: login')
 
-def getLatestDownloadedFileName(downloadsDirPath):
-    if len(os.listdir(downloadsDirPath)) == 0:
-        return None
-    return max (
-        [downloadsDirPath + '/' + f for f in os.listdir(downloadsDirPath)],
-        key=os.path.getctime
-    )
+            self.driver.implicitly_wait(60)
+            self.driver.find_element(By.ID, 'top-main-navigation')
 
-def sendChatworkNotification(message):
-    try:
-        url = f'https://api.chatwork.com/v2/rooms/{os.environ["CHATWORK_ROOM_ID"]}/messages'
-        headers = { 'X-ChatWorkToken': os.environ["CHATWORK_API_TOKEN"] }
-        params = { 'body': message }
-        requests.post(url, headers=headers, params=params)
-    except Exception as err:
-        logger.error(f'Error: sendChatworkNotification: {err}')
-        exit(1)
+            self.driver.get('https://www.felmat.net/publisher/conversion')
+            logger.debug('import_rentracks: move to conversion')
+            self.driver.implicitly_wait(20)
 
-def get_unique_list(seq):
-    seen = []
-    return [x for x in seq if x not in seen and not seen.append(x)]
+            self.driver.find_element(By.NAME, 'start_date').clear()
+            self.driver.find_element(By.NAME, 'start_date').send_keys(self.date.strftime('%Y-%m-%d'))
+            self.driver.find_element(By.NAME, 'end_date').clear()
+            self.driver.find_element(By.NAME, 'end_date').send_keys(self.date.strftime('%Y-%m-%d'))
+            self.driver.find_element(By.XPATH, "//label[@for='start_date']").click()
+            sleep(2)
 
-### Google ###
-def getGoogleCsvData(csvPath):
-    with open(csvPath, newline='', encoding='cp932') as csvfile:
-        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
-        next(buf)
-        for row in buf:
-            index = row[16].find('gclid=')
-            if index == -1:
-                continue
-            gclid = row[16].split('gclid=')[1]
-            date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
-            tdate = date.strftime('%Y/%m/%d %H:%M:%S')
-            yield [gclid, 'real_cv2', tdate, row[9], 'JPY']
+            self.driver.find_element(By.XPATH, "//button[@name='search']").click()
+            sleep(2)
 
-def getGoogleCsvDataLinkA(csvPath):
-    with open(csvPath, newline='', encoding='utf-16-le') as csvfile:
-        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
-        next(buf)
-        for row in buf:
-            print(row)
-            gclid = row[20]
-            if gclid == "":
-                continue
-            reward = int(row[6]) / 1.1
-            yield [gclid, 'real_cv2', row[2], round(reward), 'JPY']
+            if not '全サイトが対象' in self.driver.page_source:
+                logger.debug('import_felmat: no data')
+                return
 
-def writeUploadData(data, dateMsg):
-    try:
-        SPREADSHEET_ID = os.environ['CONVERSION_IMPORT_SSID']
-        scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
-        credentials = ServiceAccountCredentials.from_json_keyfile_name('spreadsheet.json', scope)
-        gc = gspread.authorize(credentials)
-        sheet = gc.open_by_key(SPREADSHEET_ID).worksheet('conversion-import-template')
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            self.driver.find_element(By.XPATH, "//button[@name='csv_dl']").click()
+            sleep(3)
 
-        sheet.clear()
-        sheet.update_acell('A1', 'Parameters:TimeZone= Asia/Tokyo;')
-        sheet.update_acell('A2', 'Google Click ID')
-        sheet.update_acell('B2', 'Conversion Name')
-        sheet.update_acell('C2', 'Conversion Time')
-        sheet.update_acell('D2', 'Conversion Value')
-        sheet.update_acell('E2', 'Conversion Currency')
+            file_path = self.get_latest_downloaded_csv(self.csv_path)
+            logger.debug(f'import_felmat: file_path -> {file_path}')
 
-        length = len(data)
-        if length == 0:
-            message = "[info][title]【Google】オフラインコンバージョンのインポート結果[/title]\n"
-            message += f'{dateMsg}のGSN発生件数は {length} 件です。[/info]'
-            sendChatworkNotification(message)
-            return
+            df = pd.read_csv(file_path, encoding='cp932')
+            filtered_df = df[
+                (df['サイトID'] == 104176) & 
+                (df['掲載URL'].str.contains('yclid=', na=False))
+            ]
 
-        cell_list = sheet.range(f'A3:E{2 + length}')
-        i = 0
-        for cell in cell_list:
-            if i % 5 == 0:
-                cell.value = data[int(i / 5)][0]
-            if i % 5 == 1:
-                cell.value = data[int(i / 5)][1]
-            if i % 5 == 2:
-                cell.value = data[int(i / 5)][2]
-            if i % 5 == 3:
-                cell.value = data[int(i / 5)][3]
-            if i % 5 == 4:
-                cell.value = data[int(i / 5)][4]
-            i += 1
+            for index, row in filtered_df.iterrows():
+                yclid = row['掲載URL'].split('yclid=')[1]
+                date = datetime.datetime.strptime(row['発生日時'], '%Y-%m-%d %H:%M:%S')
+                tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
+                price = str(int(row['成果報酬（税抜）']))
+                self.data.append([yclid, 'オフラインCV', tdate, price, 'JPY'])
 
-        sheet.update_cells(cell_list, value_input_option='USER_ENTERED')
-        message = "[info][title]【Google】オフラインコンバージョンのインポート結果[/title]\n"
-        message += 'スプレッドシートへのデータ入力が完了しました。\n\n'
-        message += f'{dateMsg}のGSN発生件数は {length} 件です。[/info]'
-        sendChatworkNotification(message)
-        return
-    except Exception as err:
-        logger.debug(f'Error: writeUploadData: {err}')
-        exit(1)
+            os.remove(file_path)
+            logger.debug(f'import_felmat: data -> {self.data}')
 
-### Yahoo! ###
-def getYahooCsvData(csvPath):
-    with open(csvPath, newline='', encoding='cp932') as csvfile:
-        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
-        next(buf)
-        for row in buf:
-            index = row[16].find('yclid=YSS')
-            if index == -1:
-                continue
-            yclid = row[16].split('yclid=')[1]
-            date = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
-            tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
-            yield [yclid, 'real_cv', tdate, row[9], 'JPY']
+        except Exception as err:
+            logger.debug(f'Error: import_felmat: {err}')
+            self.driver.close()
+            self.driver.quit()
+            exit(1)
 
-def getYahooCsvDataLinkA(csvPath):
-    with open(csvPath, newline='', encoding='utf-16-le') as csvfile:
-        buf = csv.reader(csvfile, delimiter=',', lineterminator='\r\n', skipinitialspace=True)
-        next(buf)
-        for row in buf:
-            yclid = row[21]
-            if yclid == "":
-                continue
-            reward = int(row[6]) / 1.1
-            date = datetime.datetime.strptime(row[2], '%Y/%m/%d %H:%M:%S')
-            tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
-            yield [yclid, 'real_cv', tdate, round(reward), 'JPY']
 
-def createCsvFile(data, outputFilePath):
-    header = ["YCLID","コンバージョン名","コンバージョン発生日時","1コンバージョンあたりの価値","通貨コード"]
-    with open(outputFilePath, 'w', newline='', encoding='cp932') as f:
-        writer = csv.writer(f, delimiter=',', lineterminator='\r\n',  quoting=csv.QUOTE_ALL)
-        writer.writerow(header)
-        writer.writerows(data)
+    def create_output_file(self):
+        self.driver.close()
+        self.driver.quit()
+        os.makedirs(self.output_path, exist_ok=True)
+        df = pd.DataFrame(self.data, columns=self.columns)
+        df.to_csv(f'{self.output_path}/{self.output_file_name}', quoting=csv.QUOTE_ALL, index=False, encoding='shift-jis')
 
-def getAccessToken():
-    try:
-        url_token = f'https://biz-oauth.yahoo.co.jp/oauth/v1/token?grant_type=refresh_token' \
-                f'&client_id={os.environ["YAHOO_CLIENT_ID"]}' \
-                f'&client_secret={os.environ["YAHOO_CLIENT_SECRET"]}' \
-                f'&refresh_token={os.environ["YAHOO_REFRESH_TOKEN"]}'
-        req = requests.get(url_token)
-        body = json.loads(req.text)
-        access_token = body['access_token']
-        return access_token
-    except Exception as err:
-        logger.error(f'Error: getAccessToken: {err}')
-        exit(1)
 
-def uploadCsvFile(length, outputFileName, outputFilePath, dateMsg):
-    try:
-        url_api = 'https://ads-search.yahooapis.jp/api/v7/OfflineConversionService/upload'
-        headers = { 'Authorization': f'Bearer {getAccessToken()}' }
-        files = { 'file': open(outputFilePath, mode='rb') }
-        params = {
+    def upload_offline_cv(self):
+        try:
+            url_api = 'https://ads-search.yahooapis.jp/api/v11/OfflineConversionService/upload'
+            headers = { 'Authorization': f'Bearer {self.access_token}' }
+            files = { 'file': open(f'{self.output_path}/{self.output_file_name}', mode='rb') }
+            params = {
                 'accountId': os.environ["YAHOO_ACCOUNT_ID"],
                 'uploadType': 'NEW',
-                'uploadFileName': outputFileName
-                }
-        req = requests.post(url_api, headers=headers, files=files, params=params)
-        body = json.loads(req.text)
-        logger.info(f'uploadCsvFile - status_code: {req.status_code}')
-        logger.info(f'uploadCsvFile - response:\n--> {req.text}')
+                'uploadFileName': f'{self.output_file_name}'
+            }
+            req = requests.post(url_api, headers=headers, files=files, params=params)
+            body = json.loads(req.text)
+            logger.info(f'upload_offline_cv - status_code: {req.status_code}')
+            logger.info(f'upload_offline_cv - response:\n--> {req.text}')
 
-        if req.status_code != 200:
-            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-            message += 'インポートに失敗しました。\n'
-            message += '担当者は実行ログの確認を行ってください。\n\n'
-            message += f'ステータスコード：{req.status_code}\n\n'
-            message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
-            sendChatworkNotification(message)
-            exit(0)
+            if req.status_code != 200:
+                message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+                message += 'インポートに失敗しました。\n'
+                message += '担当者は実行ログの確認を行ってください。\n\n'
+                message += f'ステータスコード：{req.status_code}\n\n'
+                message += f'YSS発生件数は {len(self.data)} 件です。[/info]'
+                self.send_chatwork_notification(message)
+                exit(0)
 
-        if body['errors'] != None:
-            errors = body['errors'][0]
-            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-            message += 'インポートに失敗しました。\n'
-            message += '担当者は実行ログの確認を行ってください。\n\n'
-            message += f'ステータスコード：{req.status_code}\n'
-            message += f'エラーコード：{errors["code"]}\n'
-            message += f'エラーメッセージ：{errors["message"]}\n'
-            message += f'エラー詳細：{errors["details"]}\n\n'
-            message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
-            sendChatworkNotification(message)
-            exit(0)
-        
-        uploadId = body['rval']['values'][0]['offlineConversion']['uploadId']
-        return [ uploadId ]
-    except Exception as err:
-        logger.debug(f'Error: uploadCsvFile: {err}')
-        exit(1)
+            if body['errors'] != None:
+                errors = body['errors'][0]
+                message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+                message += 'インポートに失敗しました。\n'
+                message += '担当者は実行ログの確認を行ってください。\n\n'
+                message += f'ステータスコード：{req.status_code}\n'
+                message += f'エラーコード：{errors["code"]}\n'
+                message += f'エラーメッセージ：{errors["message"]}\n'
+                message += f'エラー詳細：{errors["details"]}\n\n'
+                message += f'YSS発生件数は {len(self.data)} 件です。[/info]'
+                self.send_chatwork_notification(message)
+                exit(0)
 
-def checkUploadStatus(length, uploadId, dateMsg):
-    try:
-        url_api = f'https://ads-search.yahooapis.jp/api/v7/OfflineConversionService/get'
-        headers = { 'Authorization': f'Bearer {getAccessToken()}' }
-        params = {
+            self.upload_id = body['rval']['values'][0]['offlineConversion']['uploadId']
+        except Exception as err:
+            logger.debug(f'Error: upload_offline_cv: {err}')
+            exit(1)
+
+    def check_upload_status(self):
+        try:
+            url_api = f'https://ads-search.yahooapis.jp/api/v11/OfflineConversionService/get'
+            headers = { 'Authorization': f'Bearer {self.access_token}' }
+            params = {
                 'accountId': os.environ["YAHOO_ACCOUNT_ID"],
-                'uploadIds': uploadId
-               }
-        req = requests.post(url_api, headers=headers, json=params)
-        body = json.loads(req.text)
-        logger.info(f'checkUploadStatus - status_code: {req.status_code}')
-        logger.info(f'checkUploadStatus - response:\n--> {req.text}')
+                'uploadIds': [self.upload_id]
+            }
+            req = requests.post(url_api, headers=headers, json=params)
+            body = json.loads(req.text)
+            logger.info(f'checkUploadStatus - status_code: {req.status_code}')
+            logger.info(f'checkUploadStatus - response:\n--> {req.text}')
 
-        if req.status_code != 200:
+            if req.status_code != 200:
+                message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+                message += 'インポート結果の取得に失敗しました。\n'
+                message += '担当者はYahoo!広告管理画面からインポート結果の確認を行ってください。\n\n'
+                message += f'ステータスコード：{req.status_code}\n\n'
+                message += f'YSS発生件数は {len(self.data)} 件です。[/info]'
+                self.send_chatwork_notification(message)
+                exit(0)
+
+            if body['errors'] != None:
+                errors = body['errors'][0]
+                message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+                message += 'インポート結果の取得に失敗しました。\n'
+                message += '担当者はYahoo!広告管理画面からインポート結果の確認を行ってください。\n\n'
+                message += f'ステータスコード：{req.status_code}\n'
+                message += f'エラーコード：{errors["code"]}\n'
+                message += f'エラーメッセージ：{errors["message"]}\n'
+                message += f'エラー詳細：{errors["details"]}\n\n'
+                message += f'YSS発生件数は {len(self.data)} 件です。[/info]'
+                self.send_chatwork_notification(message)
+                exit(0)
+
             message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-            message += 'インポート結果の取得に失敗しました。\n'
-            message += '担当者はYahoo!広告管理画面からインポート結果の確認を行ってください。\n\n'
-            message += f'ステータスコード：{req.status_code}\n\n'
-            message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
-            sendChatworkNotification(message)
-            exit(0)
+            message += 'インポートが完了しました。\n\n'
 
-        if body['errors'] != None:
-            errors = body['errors'][0]
-            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-            message += 'インポート結果の取得に失敗しました。\n'
-            message += '担当者はYahoo!広告管理画面からインポート結果の確認を行ってください。\n\n'
-            message += f'ステータスコード：{req.status_code}\n'
-            message += f'エラーコード：{errors["code"]}\n'
-            message += f'エラーメッセージ：{errors["message"]}\n'
-            message += f'エラー詳細：{errors["details"]}\n\n'
-            message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
-            sendChatworkNotification(message)
-            exit(0)
+            for value in body['rval']['values']:
+                result = value['offlineConversion']
+                message += f'アップロードID：{result["uploadId"]}\n'
+                message += f'アップロード日時：{result["uploadedDate"]}\n'
+                message += f'ステータス：{result["processStatus"]}\n\n'
 
-        message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-        message += 'インポートが完了しました。\n\n'
+            message += f'YSS発生件数は {len(self.data)} 件です。[/info]'
+            self.send_chatwork_notification(message)
 
-        for value in body['rval']['values']:
-            result = value['offlineConversion']
-            message += f'アップロードID：{result["uploadId"]}\n'
-            message += f'アップロード日時：{result["uploadedDate"]}\n'
-            message += f'ステータス：{result["processStatus"]}\n\n'
+        except Exception as err:
+            logger.debug(f'Error: check_upload_status: {err}')
+            exit(1)
 
-        message += f'{dateMsg}のYSS発生件数は {length} 件です。[/info]'
-        sendChatworkNotification(message)
-
-    except Exception as err:
-        logger.debug(f'Error: checkUploadStatus: {err}')
-        exit(1)
-
-def getCsvPath(dirPath, taskName, no, d):
-    os.makedirs(dirPath, exist_ok=True)
-    logger.debug(f"import_offline_conversion: start import_csv_from_{taskName}")
-
-    if taskName == "linka":
-        importCsvFromLinkA(dirPath, d)
-    else:
-        importCsvFromAfb(dirPath, no, d)
-
-    csvPath = getLatestDownloadedFileName(dirPath)
-    logger.info(f"import_offline_conversion: complete download: {csvPath}")
-
-    return csvPath
 
 ### main_script ###
 if __name__ == '__main__':
 
-    d = 0
-    dateMsg = "本日"
+    days = 0
     if len(sys.argv) > 1:
-        d = int(sys.argv[1])
-        if d == 1:
-            dateMsg = "昨日"
+        days = int(sys.argv[1])
 
     try:
-        outputDirPath = './output'
-        outputFileName = '育毛剤YSS_CV戻し.csv'
-        os.makedirs(outputDirPath, exist_ok=True)
-        outputFilePath = f'{outputDirPath}/{outputFileName}'
+        bi = BasicInfo(days)
+        bi.import_rentracks()
+        bi.import_felmat()
+        bi.create_output_file()
 
-        afbCsvPath1 = getCsvPath('./csv/afb1', 'afb1', '1', d)
-        afbCsvPath2 = getCsvPath('./csv/afb2', 'afb2', '3', d)
-        linkaCsvPath = getCsvPath('./csv/linka', 'linka', None, d)
+        bi.upload_offline_cv()
+        bi.check_upload_status()
 
-        data = list(getGoogleCsvData(afbCsvPath1))
-        data.extend(list(getGoogleCsvData(afbCsvPath2)))
-        data.extend(list(getGoogleCsvDataLinkA(linkaCsvPath)))
-        data = get_unique_list(data)
-        logger.info(f'google: {data}')
-        writeUploadData(data, dateMsg)
-
-        data = list(getYahooCsvData(afbCsvPath1))
-        data.extend(list(getYahooCsvData(afbCsvPath2)))
-        data.extend(list(getYahooCsvDataLinkA(linkaCsvPath)))
-        data = get_unique_list(data)
-        logger.info(f'yahoo: {data}')
-        length = len(data)
-        if length == 0:
-            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
-            message += f'{dateMsg}のYSS発生件数は 0 件です。[/info]'
-            sendChatworkNotification(message)
-            exit(0)
-        elif length % 2 != 0:
-            logger.info("import_offline_conversion: createCsvFile")
-            createCsvFile(data, outputFilePath)
-
-            logger.info("import_offline_conversion: uploadCsvFile")
-            uploadId = uploadCsvFile(length, outputFileName, outputFilePath, dateMsg)
-        else:
-            data2 = [data.pop(0)]
-
-            logger.info("import_offline_conversion: data: createCsvFile")
-            createCsvFile(data, outputFilePath)
-            logger.info("import_offline_conversion: data: uploadCsvFile")
-            uploadId = uploadCsvFile(length, outputFileName, outputFilePath, dateMsg)
-            sleep(5)
-
-            logger.info("import_offline_conversion: data2: createCsvFile")
-            createCsvFile(data2, outputFilePath)
-            logger.info("import_offline_conversion: data2: uploadCsvFile")
-            uploadId.extend(uploadCsvFile(length, outputFileName, outputFilePath, dateMsg))
-
-        sleep(15)
-        logger.info(f"import_offline_conversion: uploadId -> {uploadId}")
-        logger.info("import_offline_conversion: checkUploadStatus")
-        checkUploadStatus(length, uploadId, dateMsg)
-
-        logger.info("import_offline_conversion: Finish")
         exit(0)
     except Exception as err:
         logger.debug(f'import_offline_conversion: {err}')

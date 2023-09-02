@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+selenium = "*"
+undetected-chromedriver = "*"
+requests = "*"
+ipython = "*"
+fake-useragent = "*"
+webdriver-manager = "*"
+pandas = "*"
+chromedriver-binary-auto = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"
