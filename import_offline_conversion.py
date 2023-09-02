@@ -111,16 +111,16 @@ class BasicInfo():
             select = Select(self.driver.find_element(By.ID, 'idGogoYear'))
             select.select_by_value(self.date.strftime('%Y'))
             select = Select(self.driver.find_element(By.ID, 'idGogoMonth'))
-            select.select_by_value(self.date.strftime('%-m'))
+            select.select_by_value(str(int(self.date.strftime('%m'))))
             select = Select(self.driver.find_element(By.ID, 'idGogoDay'))
-            select.select_by_value(self.date.strftime('%-d'))
+            select.select_by_value(str(int(self.date.strftime('%d'))))
 
             select = Select(self.driver.find_element(By.ID, 'idDoneYear'))
             select.select_by_value(self.date.strftime('%Y'))
             select = Select(self.driver.find_element(By.ID, 'idDoneMonth'))
-            select.select_by_value(self.date.strftime('%-m'))
+            select.select_by_value(str(int(self.date.strftime('%m'))))
             select = Select(self.driver.find_element(By.ID, 'idDoneDay'))
-            select.select_by_value(self.date.strftime('%-d'))
+            select.select_by_value(str(int(self.date.strftime('%-d'))))
 
             sleep(2)
             logger.debug('import_rentracks: select date')
@@ -335,8 +335,13 @@ if __name__ == '__main__':
         bi.import_felmat()
         bi.create_output_file()
 
-        bi.upload_offline_cv()
-        bi.check_upload_status()
+        if len(bi.data) > 0:
+            bi.upload_offline_cv()
+            bi.check_upload_status()
+        else:
+            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n\n"
+            message += 'インポート対象のデータがありませんでした。\n'
+            bi.send_chatwork_notification(message)
 
         exit(0)
     except Exception as err:
