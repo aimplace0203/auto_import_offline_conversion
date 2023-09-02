@@ -339,8 +339,8 @@ if __name__ == '__main__':
             bi.upload_offline_cv()
             bi.check_upload_status()
         else:
-            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n\n"
-            message += 'インポート対象のデータがありませんでした。\n'
+            message = "[info][title]【Yahoo!】オフラインコンバージョンのインポート結果[/title]\n"
+            message += 'インポート対象のデータがありませんでした。[/info]'
             bi.send_chatwork_notification(message)
 
         exit(0)
