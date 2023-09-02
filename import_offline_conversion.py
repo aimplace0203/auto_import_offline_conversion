@@ -120,7 +120,7 @@ class BasicInfo():
             select = Select(self.driver.find_element(By.ID, 'idDoneMonth'))
             select.select_by_value(str(int(self.date.strftime('%m'))))
             select = Select(self.driver.find_element(By.ID, 'idDoneDay'))
-            select.select_by_value(str(int(self.date.strftime('%-d'))))
+            select.select_by_value(str(int(self.date.strftime('%d'))))
 
             sleep(2)
             logger.debug('import_rentracks: select date')
