@@ -228,7 +228,7 @@ class BasicInfo():
         df = pd.DataFrame(self.data, columns=self.columns)
         df.to_csv(output_file_path, quoting=csv.QUOTE_ALL, index=False, encoding='shift-jis', lineterminator='\n')
         if len(self.data) % 2 != 0:
-            with open(output_file_path, 'a') as f:
+            with open(output_file_path, 'a', encoding='shift-jis', newline='\n') as f:
                 f.write('\n')
 
 
