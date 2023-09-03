@@ -226,11 +226,6 @@ class BasicInfo():
         os.makedirs(self.output_path, exist_ok=True)
         df = pd.DataFrame(self.data, columns=self.columns)
         df.to_csv(f'{self.output_path}/{self.output_file_name}', quoting=csv.QUOTE_ALL, index=False, encoding='shift-jis')
-        with open(f'{self.output_path}/{self.output_file_name}', 'r', encoding='shift-jis') as f:
-            content = f.read()
-        content = content.replace('\r\n', '\n')
-        with open(f'{self.output_path}/{self.output_file_name}', 'w', encoding='shift-jis') as f:
-            f.write(content)
 
 
     def upload_offline_cv(self):
