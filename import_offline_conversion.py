@@ -139,6 +139,7 @@ class BasicInfo():
 
             for index, row in filtered_df.iterrows():
                 yclid = row['リファラー'].split('yclid=')[1]
+                yclid = yclid.split('&')[0]
                 date_str = row['売上日時']
                 clean_date_str = date_str.split('（')[0] + date_str.split('）')[1]
                 date = datetime.datetime.strptime(clean_date_str, '%Y/%m/%d %H:%M:%S')
@@ -205,6 +206,7 @@ class BasicInfo():
 
             for index, row in filtered_df.iterrows():
                 yclid = row['掲載URL'].split('yclid=')[1]
+                yclid = yclid.split('&')[0]
                 date = datetime.datetime.strptime(row['発生日時'], '%Y-%m-%d %H:%M:%S')
                 tdate = date.strftime('%Y%m%d %H%M%S Asia/Tokyo')
                 price = str(int(row['成果報酬（税抜）']))
