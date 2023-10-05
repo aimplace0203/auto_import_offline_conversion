@@ -95,8 +95,7 @@ class BasicInfo():
             select = Select(self.driver.find_element(By.ID, 'idGogoYear'))
             select.select_by_value(self.date.strftime('%Y'))
             select = Select(self.driver.find_element(By.ID, 'idGogoMonth'))
-#            select.select_by_value(str(int(self.date.strftime('%m'))))
-            select.select_by_value("9")
+            select.select_by_value(str(int(self.date.strftime('%m'))))
             select = Select(self.driver.find_element(By.ID, 'idGogoDay'))
             select.select_by_value(str(int(self.date.strftime('%d'))))
 
